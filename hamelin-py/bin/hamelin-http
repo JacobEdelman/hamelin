@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+
+import hamelin
+import SimpleHTTPServer
+import SocketServer
+import sys
+
+class httpdaemon(hamelin.daemon):
+    def run(self, host='', port=8080):
+
+        print "Running at host %s on port %d" % (host, port)
+
+        def make_serv(client_address):
+            return self.create_server({
+            'H-VERSION': 'HAMELIN.PY-HTTP-0.1',
+            'H-CLIENT': "{0}:{1}".format(client_address[0], client_address[1])
+            })
+
+        class HamelinHTTPHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
+            def do_GET (self):
+                serv = make_serv(self.client_address)
+
+                def recv(text):
+                    self.wfile.write(text)
+                    serv.eof()
+                    serv.kill()
+
+                self.send_response(200)
+                self.end_headers()
+                serv.handle_data = recv
+                serv.startup()
+                data = self.path
+
+                if data[0] == "/":
+                    data = data[1:]
+
+                serv.send(data + "\n")
+
+                # Wait until done.
+                serv.thread.join()
+
+        httpd = SocketServer.TCPServer((host, port), HamelinHTTPHandler)
+        try:
+            while True:
+                httpd.handle_request()
+        except KeyboardInterrupt:
+            print "Finished"
+
+def main():
+    if len(sys.argv) < 4:
+        print "Usage: hamelin-http [host] [port] [args...]"
+        exit(1)
+
+    host = sys.argv[1]
+    port = int(sys.argv[2])
+    args = sys.argv[3:]
+    httpdaemon(args).run(host=host, port=port)
+
+if __name__ == '__main__':
+    main()
